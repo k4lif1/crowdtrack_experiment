@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Crowd Segmentation & Movement Tracking — POC</title>
+  <title>Crowd Tracking — DroneCrowd POC</title>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -276,8 +276,8 @@
 <body>
 
 <header>
-  <h1>Crowd Segmentation &amp; Movement Tracking</h1>
-  <p>Tracking and segmenting individual people in dense crowds from a static top-down drone perspective, using ground-truth MOT annotations as a baseline.</p>
+  <h1>Crowd Tracking — DroneCrowd POC</h1>
+  <p>Individual person detection and tracking in dense overhead drone footage, using the VisDrone MOT benchmark as ground truth.</p>
   <a class="repo-link" href="https://github.com/k4lif1/crowdtrack_experiment" target="_blank">
     <svg height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
     k4lif1 / crowdtrack_experiment
@@ -286,9 +286,10 @@
 
 <main>
 
-  <!-- ── Videos ───────────────────────────────────────────────────── -->
+  <!-- ── GT Tracking Videos ──────────────────────────────────────── -->
   <section>
-    <h2>Tracking Visualizations</h2>
+    <h2>Ground-Truth Tracking</h2>
+    <p>Rendered from the DroneCrowd XML / .mat annotations. Each person ID gets a consistent colour across all 300 frames. <a href="https://openaccess.thecvf.com/content/CVPR2021/papers/Wen_Detection_Tracking_and_Counting_Meets_Drones_in_Crowds_A_Benchmark_CVPR_2021_paper.pdf" target="_blank">VisDrone CVPR 2021</a>.</p>
 
     <div class="rejected-row">
       <span class="rejected-label">Rejected after manual review</span>
@@ -299,62 +300,42 @@
 
     <div class="video-grid">
       <div class="video-card">
-        <video src="videos/tracking_00062.mp4" poster="assets/previews/tracking_00062.jpg" controls preload="none"></video>
+        <video src="videos/gt_tracking/tracking_00062.mp4" poster="assets/previews/tracking_00062.jpg" controls preload="none"></video>
         <div class="caption">
           <span class="caption-title">Seq 00062</span>
-          <div class="tags">
-            <span class="tag">test</span>
-            <span class="tag">184 tracks</span>
-            <span class="tag">bounding boxes</span>
-          </div>
+          <div class="tags"><span class="tag">test</span><span class="tag">184 tracks</span><span class="tag">bounding boxes</span></div>
         </div>
       </div>
 
       <div class="video-card">
-        <video src="videos/tracking_train_00001.mp4" poster="assets/previews/tracking_train_00001.jpg" controls preload="none"></video>
+        <video src="videos/gt_tracking/tracking_train_00001.mp4" poster="assets/previews/tracking_train_00001.jpg" controls preload="none"></video>
         <div class="caption">
           <span class="caption-title">Seq 00001</span>
-          <div class="tags">
-            <span class="tag">train</span>
-            <span class="tag">142 IDs</span>
-            <span class="tag">medium density</span>
-          </div>
+          <div class="tags"><span class="tag">train</span><span class="tag">142 IDs</span><span class="tag">medium density</span></div>
         </div>
       </div>
 
       <div class="video-card">
-        <video src="videos/tracking_train_00006.mp4" poster="assets/previews/tracking_train_00006.jpg" controls preload="none"></video>
+        <video src="videos/gt_tracking/tracking_train_00006.mp4" poster="assets/previews/tracking_train_00006.jpg" controls preload="none"></video>
         <div class="caption">
           <span class="caption-title">Seq 00006</span>
-          <div class="tags">
-            <span class="tag">train</span>
-            <span class="tag">433 IDs</span>
-            <span class="tag">dense</span>
-          </div>
+          <div class="tags"><span class="tag">train</span><span class="tag">433 IDs</span><span class="tag">dense</span></div>
         </div>
       </div>
 
       <div class="video-card">
-        <video src="videos/tracking_train_00040.mp4" poster="assets/previews/tracking_train_00040.jpg" controls preload="none"></video>
+        <video src="videos/gt_tracking/tracking_train_00040.mp4" poster="assets/previews/tracking_train_00040.jpg" controls preload="none"></video>
         <div class="caption">
           <span class="caption-title">Seq 00040</span>
-          <div class="tags">
-            <span class="tag">train</span>
-            <span class="tag">150 IDs</span>
-            <span class="tag">varied scene</span>
-          </div>
+          <div class="tags"><span class="tag">train</span><span class="tag">150 IDs</span><span class="tag">varied scene</span></div>
         </div>
       </div>
 
       <div class="video-card full">
-        <video src="videos/tracking_train_00100.mp4" poster="assets/previews/tracking_train_00100.jpg" controls preload="none"></video>
+        <video src="videos/gt_tracking/tracking_train_00100.mp4" poster="assets/previews/tracking_train_00100.jpg" controls preload="none"></video>
         <div class="caption">
           <span class="caption-title">Seq 00100 — densest validated</span>
-          <div class="tags">
-            <span class="tag">train</span>
-            <span class="tag">514 IDs</span>
-            <span class="tag">densest</span>
-          </div>
+          <div class="tags"><span class="tag">train</span><span class="tag">514 IDs</span><span class="tag">densest</span></div>
         </div>
       </div>
     </div>
@@ -362,79 +343,41 @@
 
   <!-- ── Dataset ──────────────────────────────────────────────────── -->
   <section>
-    <h2>Dataset — DroneCrowd MOT <a href="https://openaccess.thecvf.com/content/CVPR2021/papers/Wen_Detection_Tracking_and_Counting_Meets_Drones_in_Crowds_A_Benchmark_CVPR_2021_paper.pdf" target="_blank">(VisDrone, CVPR 2021)</a></h2>
-
-    <p>All footage is 1920×1080, 25 fps, captured from a drone at varying altitudes across 70 outdoor scenes. Each sequence is 300 frames (~12 seconds). Download: <a href="https://drive.google.com/drive/folders/1EUKLJ1WmrhWTNGt4wFLyHSfspJAt56WN" target="_blank">Google Drive</a> · <a href="https://pan.baidu.com/s/1hjXoVZJ16y9Tf7UXcJw3oQ" target="_blank">Baidu Yun</a> (code <code>ml1u</code>).</p>
+    <h2>Dataset</h2>
+    <p>1920×1080 · 25 fps · 70 scenes · 300 frames/seq (~12 sec).
+    Download: <a href="https://drive.google.com/drive/folders/1EUKLJ1WmrhWTNGt4wFLyHSfspJAt56WN" target="_blank">Google Drive</a> · <a href="https://pan.baidu.com/s/1hjXoVZJ16y9Tf7UXcJw3oQ" target="_blank">Baidu Yun</a> (code <code>ml1u</code>).</p>
 
     <table>
-      <thead>
-        <tr>
-          <th>Split</th>
-          <th>Sequences</th>
-          <th>Frames</th>
-          <th>Annotation format</th>
-        </tr>
-      </thead>
+      <thead><tr><th>Split</th><th>Seqs</th><th>Frames</th><th>Format</th></tr></thead>
       <tbody>
-        <tr>
-          <td>Train</td>
-          <td>82</td>
-          <td>24,600</td>
-          <td><code>.mat</code> — <code>(x, y, person_id)</code> head points, persistent IDs</td>
-        </tr>
-        <tr>
-          <td>Val</td>
-          <td>30</td>
-          <td>360</td>
-          <td><code>.mat</code> — sparse (12 frames / seq)</td>
-        </tr>
-        <tr>
-          <td>Test</td>
-          <td>30</td>
-          <td>9,000</td>
-          <td><code>.xml</code> — bounding boxes with persistent <code>track_id</code> per frame</td>
-        </tr>
+        <tr><td>Train</td><td>82</td><td>24,600</td><td><code>.mat</code> — <code>(x, y, person_id)</code> head points</td></tr>
+        <tr><td>Val</td><td>30</td><td>360</td><td><code>.mat</code> — sparse (12 frames/seq)</td></tr>
+        <tr><td>Test</td><td>30</td><td>9,000</td><td><code>.xml</code> — bounding boxes + persistent <code>track_id</code></td></tr>
       </tbody>
     </table>
-
     <br>
-    <p><strong>Train set:</strong> 15,347 unique tracked individuals · 147 people per frame on average · up to 455 in the densest scenes · IDs 100% persistent across all 300 frames per sequence.</p>
-  </section>
-
-  <!-- ── Annotation diff ──────────────────────────────────────────── -->
-  <section>
-    <h2>Dataset Annotations vs. What the Scripts Produce</h2>
-
-    <p>The raw dataset ships as images and annotation files — no visualizations. The annotation format differs between splits, and that difference directly affects what the rendering scripts can draw.</p>
+    <p>Train: 15,347 unique IDs · 147 people/frame avg · up to 455 in densest scenes · IDs persistent across all 300 frames.</p>
 
     <div class="diff-grid">
       <div class="diff-card">
-        <h4>Train / Val — <code>.mat</code> head points</h4>
-        <p>One file per frame. Contains a single <code>(N, 3)</code> array with columns <code>x, y, person_id</code>. Only the head centre is recorded — no bounding box. Scripts draw a filled circle at the head position.</p>
+        <h4>Train / Val — <code>.mat</code></h4>
+        <p>One file per frame. <code>(N, 3)</code> array: <code>x, y, person_id</code>. Head centre only. Scripts draw a filled circle.</p>
       </div>
       <div class="diff-card">
-        <h4>Test — <code>.xml</code> bounding boxes</h4>
-        <p>One file per sequence. Each <code>&lt;track id="N"&gt;</code> holds a <code>&lt;box&gt;</code> per frame with <code>xtl, ytl, xbr, ybr</code>, an <code>outside</code> flag, and an <code>occluded</code> flag. Ground-truth boxes — not model predictions.</p>
+        <h4>Test — <code>.xml</code></h4>
+        <p>One file per sequence. <code>&lt;track id&gt;</code> → <code>&lt;box xtl ytl xbr ybr outside occluded&gt;</code> per frame.</p>
       </div>
     </div>
-
-    <h3>What the rendering scripts add on top</h3>
-    <ul class="layers">
-      <li><strong>Colour assignment</strong> — each <code>person_id</code> maps to a unique BGR colour from an evenly-spaced HSV palette, held constant across all frames.</li>
-      <li><strong>Motion trail</strong> — the last 30 frame-centre positions drawn as a fading polyline, giving a visual sense of direction and speed.</li>
-      <li><strong>ID label</strong> — numeric track ID printed above each annotation with a dark background for readability at high density.</li>
-      <li><strong>HUD</strong> — frame counter, sequence ID, and visible / total counts burned into the top-left corner.</li>
-    </ul>
   </section>
 
-  <!-- ── Next steps ───────────────────────────────────────────────── -->
+  <!-- ── Model Tracking ───────────────────────────────────────────── -->
   <section>
-    <h2>Next Steps</h2>
-    <ul class="steps">
-      <li><span class="step-dot"></span><span>Integrate <strong>SAM 3</strong> (Meta, Nov 2025) for pixel-level instance segmentation — text-prompted, unified detect + segment + track in a single forward pass.</span></li>
-      <li><span class="step-dot"></span><span>Source a real live music event video from a static overhead angle — leading candidates: Festival of Lights Lyon (Zenodo, public), BBC Glastonbury webcam archive. Production plan: fixed camera on venue truss.</span></li>
-      <li><span class="step-dot"></span><span>Evaluate <strong>YOLOv8 + ByteTrack</strong> (pretrained on VisDrone) as a faster real-time inference alternative to SAM 3.</span></li>
-      <li><span class="step-dot"></span><span>Flow clustering to detect group movement patterns and crowd pressure buildup.</span></li>
+    <h2>Model Tracking — YOLOv8 + SAHI + ByteTrack</h2>
+    <p>YOLOv8l fine-tuned on VisDrone, sliced via SAHI (640×640 tiles, 20% overlap) to handle tiny aerial people, tracked with ByteTrack. No ground-truth input. Runs on Apple Silicon MPS at ~2 fps.</p>
+    <ul class="layers">
+      <li><strong>SAHI</strong> — slices each 1920×1080 frame into overlapping tiles before detection; standard technique for small-object aerial inference.</li>
+      <li><strong>YOLOv8l-VisDrone</strong> — <a href="https://huggingface.co/mshamrai/yolov8l-visdrone" target="_blank">mshamrai/yolov8l-visdrone</a>, trained on the same benchmark as the footage.</li>
+      <li><strong>ByteTrack</strong> — assigns consistent IDs across frames using IoU + Kalman filter motion prediction.</li>
     </ul>
   </section>
 
@@ -443,12 +386,11 @@
     <h2>Stack</h2>
     <table class="stack-table">
       <tbody>
-        <tr><td>Segmentation</td><td>SAM 3 / SAM 3.1</td></tr>
-        <tr><td>Detection + tracking</td><td>YOLOv8 + ByteTrack, pretrained on VisDrone</td></tr>
-        <tr><td>Optical flow</td><td>RAFT</td></tr>
-        <tr><td>Data loading</td><td><code>scipy.io</code>, <code>xml.etree</code>, <code>opencv-python-headless</code></td></tr>
-        <tr><td>Visualization</td><td><code>matplotlib</code>, <code>opencv</code></td></tr>
-        <tr><td>Dataset download</td><td><code>gdown</code></td></tr>
+        <tr><td>Detection</td><td>YOLOv8l, fine-tuned on VisDrone</td></tr>
+        <tr><td>Sliced inference</td><td>SAHI (640×640 tiles)</td></tr>
+        <tr><td>Tracking</td><td>ByteTrack via <code>supervision</code></td></tr>
+        <tr><td>Data loading</td><td><code>scipy.io</code>, <code>xml.etree</code>, <code>opencv</code></td></tr>
+        <tr><td>Visualization</td><td><code>opencv</code>, <code>matplotlib</code></td></tr>
       </tbody>
     </table>
   </section>

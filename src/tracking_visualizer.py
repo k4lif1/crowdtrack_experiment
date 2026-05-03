@@ -54,7 +54,7 @@ Usage
   # Override output directory:
   python src/tracking_visualizer.py --split test --seq 00062 --out my_videos/
 
-Output: videos/tracking_{seq_id}.mp4  (or tracking_train_{seq_id}.mp4)
+Output: videos/gt_tracking/tracking_{seq_id}.mp4  (or tracking_train_{seq_id}.mp4)
 
 Requirements: opencv-python-headless, scipy, numpy
 """
@@ -250,7 +250,7 @@ def render_frame_train(img: np.ndarray, frame_idx: int, tracks: dict,
 
 # ── Sequence renderer ──────────────────────────────────────────────────────────
 
-def render_sequence(seq_id: str, split: str, out_dir: str) -> None:
+def render_sequence(seq_id: str, split: str, out_dir: str, raw: bool = False) -> None:
     seq_num   = int(seq_id)
     img_split = "test_data" if split == "test" else "train_data"
     img_dir   = os.path.join(MOT_ROOT, img_split, "images")
@@ -279,11 +279,14 @@ def render_sequence(seq_id: str, split: str, out_dir: str) -> None:
     h, w = probe.shape[:2]
 
     os.makedirs(out_dir, exist_ok=True)
-    prefix   = "tracking_train_" if split == "train" else "tracking_"
+    prefix   = "source_train_" if (raw and split == "train") else \
+               "source_"       if raw                        else \
+               "tracking_train_" if split == "train"         else "tracking_"
     out_path = os.path.join(out_dir, f"{prefix}{seq_id}.mp4")
     writer   = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"mp4v"), FPS, (w, h))
 
-    print(f"  [{split}] seq {seq_id}  |  {len(frames)} frames  |  {len(tid_list)} IDs  →  {out_path}")
+    mode_label = "raw" if raw else split
+    print(f"  [{mode_label}] seq {seq_id}  |  {len(frames)} frames  |  {len(tid_list)} IDs  →  {out_path}")
 
     for fi in frames:
         img_path = os.path.join(img_dir, f"img{seq_num:03d}{fi + 1:03d}.jpg")
@@ -291,7 +294,9 @@ def render_sequence(seq_id: str, split: str, out_dir: str) -> None:
         if img is None:
             img = np.zeros((h, w, 3), dtype=np.uint8)
 
-        if split == "test":
+        if raw:
+            frame = img
+        elif split == "test":
             frame = render_frame_test(img, fi, tracks, tid_to_color, seq_id)
         else:
             frame = render_frame_train(img, fi, tracks, tid_to_color, seq_id)
@@ -320,13 +325,19 @@ def parse_args():
         help="One or more zero-padded sequence IDs, e.g. 00062 00001 00006.",
     )
     parser.add_argument(
-        "--out", default="videos", metavar="DIR",
-        help="Output directory for rendered MP4s (default: videos/).",
+        "--raw", action="store_true",
+        help="Export plain source video with no annotations (outputs to videos/source/ by default).",
+    )
+    parser.add_argument(
+        "--out", default=None, metavar="DIR",
+        help="Output directory. Defaults to videos/source/ with --raw, videos/gt_tracking/ otherwise.",
     )
     return parser.parse_args()
 
 
 if __name__ == "__main__":
     args = parse_args()
+    if args.out is None:
+        args.out = "videos/source" if args.raw else "videos/gt_tracking"
     for seq_id in args.seq:
-        render_sequence(seq_id.zfill(5), args.split, args.out)
+        render_sequence(seq_id.zfill(5), args.split, args.out, raw=args.raw)
