@@ -1,0 +1,25 @@
+# ── Dataset (too large to track) ─────────────────────────────────────────────
+data/
+
+# ── Build artifacts & OS ─────────────────────────────────────────────────────
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+.env
+
+# ── Jupyter ───────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+
+# ── Editor ───────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+
+# ── Claude ───────────────────────────────────────────────────────────────────
+.claude/
+
+# ── Videos and preview images ARE tracked (see videos/) ──────────────────────
+!videos/
+!videos/*.mp4
+!videos/*.jpg
