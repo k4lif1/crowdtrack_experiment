@@ -60,12 +60,9 @@ dor_seg_exp/
 │   ├── trajectory_viz.png              # CC challenge visualization (seq 00009)
 │   └── trajectory_mot_viz.png          # MOT ground-truth + heatmap (seq 00011)
 ├── videos/
-│   ├── tracking_00011.mp4              # Test seq 00011 — 269 tracks, 300 frames
-│   ├── tracking_00022.mp4              # Test seq 00022 — 283 tracks, 300 frames
 │   ├── tracking_00062.mp4              # Test seq 00062 — 184 tracks, 300 frames
 │   ├── tracking_train_00001.mp4        # Train seq 00001 — 142 IDs, medium density
 │   ├── tracking_train_00006.mp4        # Train seq 00006 — 433 IDs, dense
-│   ├── tracking_train_00008.mp4        # Train seq 00008 — 503 IDs, densest
 │   ├── tracking_train_00040.mp4        # Train seq 00040 — 150 IDs, varied scene
 │   └── tracking_train_00100.mp4        # Train seq 00100 — 514 IDs, densest
 └── data/                               # (gitignored — download separately)
