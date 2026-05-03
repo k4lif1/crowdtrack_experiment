@@ -67,7 +67,9 @@ Output: `videos/tracking_{seq_id}.mp4` (test) or `videos/tracking_train_{seq_id}
 
 ## Validated videos (`videos/`)
 
-Manually reviewed — sequences with tracking errors removed.
+All sequences were rendered and manually reviewed by watching each video in full. Sequences where individual trajectories looked visually incorrect — misassigned IDs, erratic jumps, or tracks that clearly didn't correspond to real movement — were discarded. Only videos that passed this eye test are committed to the repo.
+
+Rejected: `tracking_00011`, `tracking_00022`, `tracking_train_00008`.
 
 | File | Split | Seq | Tracks | Notes |
 |------|-------|-----|--------|-------|

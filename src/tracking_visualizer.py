@@ -287,7 +287,9 @@ def render_sequence(seq_id: str, split: str, out_dir: str) -> None:
 
     for fi in frames:
         img_path = os.path.join(img_dir, f"img{seq_num:03d}{fi + 1:03d}.jpg")
-        img      = cv2.imread(img_path) or np.zeros((h, w, 3), dtype=np.uint8)
+        img      = cv2.imread(img_path)
+        if img is None:
+            img = np.zeros((h, w, 3), dtype=np.uint8)
 
         if split == "test":
             frame = render_frame_test(img, fi, tracks, tid_to_color, seq_id)
