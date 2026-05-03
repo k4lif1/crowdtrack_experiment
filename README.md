@@ -1,136 +1,91 @@
 # Crowd Segmentation & Movement Tracking — POC
 
-A research experiment for tracking and segmenting individual movement in dense crowds during live music events, using drone top-down footage.
+Researching a pipeline to track and segment individual people in dense crowds during live music events, using static top-down drone footage as input.
 
 ---
 
-## Research Goal
+## Motivation
 
-Build a pipeline that can:
-1. Ingest a static top-down drone shot of a live music crowd
-2. Segment individual people from one another
-3. Track each person's movement trajectory over time
-4. Visualize motion patterns, flow, and density
+Live music events produce complex, high-density crowd dynamics that are difficult to analyze in real time. The goal is to build a system that can ingest a static overhead camera feed, separate individuals from one another at the pixel level, and continuously track each person's position over time — enabling crowd flow analysis, safety monitoring, and behavioral pattern detection.
 
-The intended production setup is a **fixed overhead camera** mounted on a truss or crane arm at a venue — giving an unlimited-runtime static top-down view without drone battery/airspace constraints.
+The intended production setup is a **fixed camera mounted overhead on a truss or crane arm at the venue**, rather than an actual drone. This eliminates battery and airspace constraints while replicating the exact top-down perspective needed for reliable individual-level segmentation.
 
 ---
 
-## Dataset — DroneCrowd (VisDrone CVPR 2021)
+## Dataset — DroneCrowd MOT (VisDrone, CVPR 2021)
 
-**Paper:** [Detection, Tracking, and Counting Meets Drones in Crowds (CVPR 2021)](https://openaccess.thecvf.com/content/CVPR2021/papers/Wen_Detection_Tracking_and_Counting_Meets_Drones_in_Crowds_A_Benchmark_CVPR_2021_paper.pdf)
+**Paper:** [Detection, Tracking, and Counting Meets Drones in Crowds](https://openaccess.thecvf.com/content/CVPR2021/papers/Wen_Detection_Tracking_and_Counting_Meets_Drones_in_Crowds_A_Benchmark_CVPR_2021_paper.pdf)
 
-Two sub-datasets are used:
+All footage is 1920×1080, 25fps, captured from a drone at varying altitudes across 70 different outdoor scenes in Chinese cities. Each sequence is 300 frames (~12 seconds).
 
-### Crowd Counting (CC) — Challenge Version
-- 112 sequences, ~30 frames each at 1920×1080
-- Annotations: `frame, x, y` head-point per person (no persistent IDs)
-- Used for: initial trajectory reconstruction via nearest-neighbour matching
-
-### Multi-Object Tracking (MOT) — Full Version
 | Split | Sequences | Frames | Annotation format |
 |-------|-----------|--------|-------------------|
-| Train | 82 | 24,600 | `.mat` files — `(x, y, person_id)` head points with persistent IDs |
-| Val   | 30 | 360    | `.mat` files — sparse (12 frames/seq) |
-| Test  | 30 | 9,000  | XML files — `<track id>` bounding boxes across 300 frames/seq |
+| Train | 82 | 24,600 | `.mat` — `(x, y, person_id)` head points, persistent IDs |
+| Val   | 30 | 360    | `.mat` — sparse (12 frames/seq) |
+| Test  | 30 | 9,000  | `.xml` — bounding boxes with persistent `track_id` per frame |
 
-**Key stats (train set):**
-- 15,347 unique tracked individuals
-- Average 147 people per frame
-- Maximum 455 people in a single frame (seq 008)
-- 100% ID persistence across consecutive frames (verified)
+**Train set highlights:**
+- 15,347 unique tracked individuals across 82 sequences
+- 147 people per frame on average; up to 455 in the densest scenes
+- Person IDs are 100% persistent across all 300 frames of each sequence — no interpolation needed
 
-Dataset is not included in this repo. Download links:
-- Google Drive (full): https://drive.google.com/drive/folders/1EUKLJ1WmrhWTNGt4wFLyHSfspJAt56WN
-- CC challenge: https://drive.google.com/file/d/1HY3V4QObrVjzXUxL_J86oxn2bi7FMUgd/view
-- Baidu Yun (full, code `ml1u`): https://pan.baidu.com/s/1hjXoVZJ16y9Tf7UXcJw3oQ
+The test set annotations are richer: full bounding boxes (not just head points) with occlusion flags, making them better suited for evaluating segmentation quality. Train annotations are head-point only, suited for trajectory and density work.
 
----
+Dataset is not included in this repo — download separately:
+- Google Drive: https://drive.google.com/drive/folders/1EUKLJ1WmrhWTNGt4wFLyHSfspJAt56WN
+- Baidu Yun (code `ml1u`): https://pan.baidu.com/s/1hjXoVZJ16y9Tf7UXcJw3oQ
 
-## Directory Structure
-
-```
-dor_seg_exp/
-├── src/
-│   ├── visualize_trajectories.py       # CC challenge — NN-matched trajectory overlay (static image)
-│   ├── visualize_mot_trajectories.py   # MOT test set — ground-truth XML trajectory overlay (static image)
-│   ├── render_tracking_video.py        # MOT test set — annotated tracking video renderer
-│   └── render_train_video.py           # MOT train set — annotated tracking video renderer
-├── assets/
-│   ├── trajectory_viz.png              # CC challenge visualization (seq 00009)
-│   └── trajectory_mot_viz.png          # MOT ground-truth + heatmap (seq 00011)
-├── videos/
-│   ├── tracking_00062.mp4              # Test seq 00062 — 184 tracks, 300 frames
-│   ├── tracking_train_00001.mp4        # Train seq 00001 — 142 IDs, medium density
-│   ├── tracking_train_00006.mp4        # Train seq 00006 — 433 IDs, dense
-│   ├── tracking_train_00040.mp4        # Train seq 00040 — 150 IDs, varied scene
-│   └── tracking_train_00100.mp4        # Train seq 00100 — 514 IDs, densest
-└── data/                               # (gitignored — download separately)
-    └── dronecrowd/
-        ├── VisDrone2020-CC/            # CC challenge split
-        └── mot_full/                   # MOT full dataset
-            ├── annotations/            # 112 XML files (test + val ground truth)
-            ├── train_data/             # images + .mat GT (82 sequences)
-            ├── val_data/               # images + .mat GT (30 sequences, sparse)
-            └── test_data/              # images + XML GT (30 sequences, 300 frames each)
-```
+Expected local path after download: `data/dronecrowd/mot_full/`
 
 ---
 
-## Visualization Pipeline
+## Visualizations
 
-### Static image (trajectory map + heatmap)
-```bash
-python src/visualize_mot_trajectories.py
-# Output: trajectory_mot_viz.png
-# Shows all trajectories overlaid on a mid-sequence frame + movement density heatmap
+### Static trajectory map (`assets/trajectory_mot_viz.png`)
+All 269 ground-truth tracks from test sequence 00011 overlaid on a mid-sequence frame, alongside a Gaussian-smoothed movement density heatmap. Generated by `src/visualize_mot_trajectories.py`.
+
+### Tracking videos (`videos/`)
+Each frame renders color-coded bounding boxes (test) or head-point dots (train), a 30-frame motion trail per individual, and a per-person ID label. Videos were manually reviewed; sequences with prediction errors were removed.
+
+| File | Split | Seq | Tracks | Notes |
+|------|-------|-----|--------|-------|
+| `tracking_00062.mp4` | Test | 00062 | 184 | Bounding box annotations |
+| `tracking_train_00001.mp4` | Train | 00001 | 142 | Medium density |
+| `tracking_train_00006.mp4` | Train | 00006 | 433 | Dense |
+| `tracking_train_00040.mp4` | Train | 00040 | 150 | Varied scene |
+| `tracking_train_00100.mp4` | Train | 00100 | 514 | Densest validated sequence |
+
+---
+
+## Source
+
 ```
-
-### Tracking video (color-coded individuals)
-```bash
-# For MOT test sequences (XML bounding boxes)
-python src/render_tracking_video.py
-
-# For MOT train sequences (.mat head points)
-python src/render_train_video.py
+src/
+  visualize_mot_trajectories.py   Static trajectory + heatmap image from test XML annotations
+  render_tracking_video.py        Tracking video renderer for test split (XML bounding boxes)
+  render_train_video.py           Tracking video renderer for train split (.mat head points)
 ```
-
-Each video frame shows:
-- **Unique color per person ID** — consistent across all frames
-- **ID number label** on every visible individual
-- **Motion trail** — last 30 frames of each person's path
-- **Frame counter + visible/total track counts**
 
 ---
 
 ## Next Steps
 
-- [ ] Integrate **SAM 3** (Meta, released Nov 2025) for pixel-level crowd segmentation
-- [ ] Source a static top-down live music event video for domain-specific testing
-  - Candidates: Festival of Lights Lyon (Zenodo, public), BBC Glastonbury webcam, stock footage
-  - Production plan: fixed camera on venue truss (eliminates drone battery/airspace limits)
-- [ ] Download remaining MOT train/val frames once Google Drive quota resets
-- [ ] Experiment with flow clustering to identify group behavior patterns
+- [ ] Integrate **SAM 3** (Meta, Nov 2025) for pixel-level instance segmentation — supports text prompts, unified detect + segment + track in a single forward pass
+- [ ] Source a real live music event video from a static overhead angle for domain-specific validation
+  - Leading candidates: Festival of Lights Lyon dataset (Zenodo, public, ~5k attendees overhead-tracked), BBC Glastonbury multi-camera webcam archive
+  - Production plan: fixed venue camera replaces drone entirely
+- [ ] Evaluate **YOLOv8 + ByteTrack** (pretrained on VisDrone) as a faster inference alternative to SAM 3 for real-time use
+- [ ] Flow clustering to detect group movement patterns and crowd pressure buildup
 
 ---
 
-## Tools & Models Considered
+## Stack
 
-| Task | Tool | Notes |
-|------|------|-------|
-| Instance segmentation | SAM 3 / SAM 3.1 | Text-prompted, unified detect+segment+track |
-| Detection + tracking | YOLOv8 + ByteTrack | Fast, strong on small aerial pedestrians |
-| Optical flow | RAFT / DIS | Per-person trajectory smoothing |
-| Pretrained weights | VisDrone YOLOv8 | Fine-tuned on drone crowd data |
-
----
-
-## Requirements
-
-```
-opencv-python-headless
-matplotlib
-scipy
-Pillow
-gdown
-```
+| Layer | Tool |
+|-------|------|
+| Segmentation | SAM 3 / SAM 3.1 |
+| Detection + tracking | YOLOv8 + ByteTrack, pretrained on VisDrone |
+| Optical flow | RAFT |
+| Data loading | `scipy.io`, `xml.etree`, `opencv-python-headless` |
+| Visualization | `matplotlib`, `opencv` |
+| Dataset download | `gdown` |
