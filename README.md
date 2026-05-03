@@ -1,5 +1,34 @@
 # Crowd Segmentation & Movement Tracking — POC
 
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <b>Test · Seq 00062 · 184 tracks · bounding boxes</b><br><br>
+      <video src="videos/tracking_00062.mp4" poster="assets/previews/tracking_00062.jpg" controls width="100%"></video>
+    </td>
+    <td align="center" width="50%">
+      <b>Train · Seq 00001 · 142 IDs · medium density</b><br><br>
+      <video src="videos/tracking_train_00001.mp4" poster="assets/previews/tracking_train_00001.jpg" controls width="100%"></video>
+    </td>
+  </tr>
+  <tr>
+    <td align="center">
+      <b>Train · Seq 00006 · 433 IDs · dense</b><br><br>
+      <video src="videos/tracking_train_00006.mp4" poster="assets/previews/tracking_train_00006.jpg" controls width="100%"></video>
+    </td>
+    <td align="center">
+      <b>Train · Seq 00040 · 150 IDs · varied scene</b><br><br>
+      <video src="videos/tracking_train_00040.mp4" poster="assets/previews/tracking_train_00040.jpg" controls width="100%"></video>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2">
+      <b>Train · Seq 00100 · 514 IDs · densest validated</b><br><br>
+      <video src="videos/tracking_train_00100.mp4" poster="assets/previews/tracking_train_00100.jpg" controls width="50%"></video>
+    </td>
+  </tr>
+</table>
+
 ---
 
 ## Dataset — DroneCrowd MOT (VisDrone, CVPR 2021)
@@ -70,37 +99,6 @@ Output: `videos/tracking_{seq_id}.mp4` (test) or `videos/tracking_train_{seq_id}
 All sequences were rendered and manually reviewed by watching each video in full. Sequences where individual trajectories looked visually incorrect — misassigned IDs, erratic jumps, or tracks that clearly didn't correspond to real movement — were discarded. Only videos that passed this eye test are committed to the repo.
 
 Rejected after review: `tracking_00011`, `tracking_00022`, `tracking_train_00008`.
-
-<br>
-
-<table>
-  <tr>
-    <td align="center" width="50%">
-      <b>Test · Seq 00062 · 184 tracks · bounding boxes</b><br><br>
-      <video src="videos/tracking_00062.mp4" poster="assets/previews/tracking_00062.jpg" controls width="100%"></video>
-    </td>
-    <td align="center" width="50%">
-      <b>Train · Seq 00001 · 142 IDs · medium density</b><br><br>
-      <video src="videos/tracking_train_00001.mp4" poster="assets/previews/tracking_train_00001.jpg" controls width="100%"></video>
-    </td>
-  </tr>
-  <tr>
-    <td align="center">
-      <b>Train · Seq 00006 · 433 IDs · dense</b><br><br>
-      <video src="videos/tracking_train_00006.mp4" poster="assets/previews/tracking_train_00006.jpg" controls width="100%"></video>
-    </td>
-    <td align="center">
-      <b>Train · Seq 00040 · 150 IDs · varied scene</b><br><br>
-      <video src="videos/tracking_train_00040.mp4" poster="assets/previews/tracking_train_00040.jpg" controls width="100%"></video>
-    </td>
-  </tr>
-  <tr>
-    <td align="center" colspan="2">
-      <b>Train · Seq 00100 · 514 IDs · densest validated</b><br><br>
-      <video src="videos/tracking_train_00100.mp4" poster="assets/previews/tracking_train_00100.jpg" controls width="50%"></video>
-    </td>
-  </tr>
-</table>
 
 ---
 
