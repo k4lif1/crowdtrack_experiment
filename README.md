@@ -1,15 +1,5 @@
 # Crowd Segmentation & Movement Tracking — POC
 
-Researching a pipeline to track and segment individual people in dense crowds during live music events, using static top-down drone footage as input.
-
----
-
-## Motivation
-
-Live music events produce complex, high-density crowd dynamics that are difficult to analyze in real time. The goal is to build a system that can ingest a static overhead camera feed, separate individuals from one another at the pixel level, and continuously track each person's position over time — enabling crowd flow analysis, safety monitoring, and behavioral pattern detection.
-
-The intended production setup is a **fixed camera mounted overhead on a truss or crane arm at the venue**, rather than an actual drone. This eliminates battery and airspace constraints while replicating the exact top-down perspective needed for reliable individual-level segmentation.
-
 ---
 
 ## Dataset — DroneCrowd MOT (VisDrone, CVPR 2021)
