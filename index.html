@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Crowd Segmentation & Movement Tracking — POC</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg:       #0d1117;
+      --surface:  #161b22;
+      --border:   #30363d;
+      --text:     #e6edf3;
+      --muted:    #8b949e;
+      --accent:   #58a6ff;
+      --tag-bg:   #1f2937;
+      --tag-text: #93c5fd;
+      --rejected: #f87171;
+      --mono:     "SF Mono", "Fira Code", "Consolas", monospace;
+    }
+
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+    }
+
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+
+    /* ── Layout ── */
+    header {
+      border-bottom: 1px solid var(--border);
+      padding: 48px 0 36px;
+      text-align: center;
+    }
+
+    header h1 {
+      font-size: 2rem;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+      margin-bottom: 10px;
+    }
+
+    header p {
+      color: var(--muted);
+      max-width: 580px;
+      margin: 0 auto 20px;
+    }
+
+    .repo-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 7px 16px;
+      font-size: 13px;
+      color: var(--text);
+      transition: border-color 0.15s;
+    }
+    .repo-link:hover { border-color: var(--accent); text-decoration: none; }
+    .repo-link svg { opacity: 0.7; }
+
+    main {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 48px 24px 80px;
+    }
+
+    section { margin-bottom: 64px; }
+
+    h2 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      padding-bottom: 10px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 24px;
+    }
+
+    h3 {
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      font-size: 11px;
+      margin-bottom: 16px;
+    }
+
+    p { margin-bottom: 14px; color: var(--text); }
+    p:last-child { margin-bottom: 0; }
+
+    /* ── Videos grid ── */
+    .video-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 20px;
+    }
+
+    .video-grid .full { grid-column: 1 / -1; }
+
+    .video-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: hidden;
+      transition: border-color 0.15s;
+    }
+    .video-card:hover { border-color: var(--accent); }
+
+    .video-card video {
+      width: 100%;
+      display: block;
+      background: #000;
+    }
+
+    .video-card .caption {
+      padding: 12px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .caption-title { font-size: 13px; font-weight: 600; }
+
+    .tags { display: flex; gap: 6px; flex-wrap: wrap; }
+
+    .tag {
+      background: var(--tag-bg);
+      color: var(--tag-text);
+      font-size: 11px;
+      font-weight: 500;
+      padding: 2px 8px;
+      border-radius: 20px;
+      font-family: var(--mono);
+    }
+
+    /* ── Dataset table ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+    }
+
+    th {
+      background: var(--surface);
+      color: var(--muted);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 10px 16px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 11px 16px;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    tr:last-child td { border-bottom: none; }
+
+    code {
+      font-family: var(--mono);
+      font-size: 12px;
+      background: var(--tag-bg);
+      color: var(--tag-text);
+      padding: 1px 6px;
+      border-radius: 4px;
+    }
+
+    /* ── Annotation diff cards ── */
+    .diff-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .diff-card {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 18px 20px;
+    }
+
+    .diff-card h4 {
+      font-size: 13px;
+      font-weight: 600;
+      margin-bottom: 10px;
+      color: var(--accent);
+    }
+
+    .diff-card p { font-size: 13px; color: var(--muted); }
+
+    /* ── Layers list ── */
+    .layers { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+    .layers li {
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 12px 16px;
+      font-size: 13px;
+    }
+
+    .layers li strong { color: var(--accent); }
+
+    /* ── Rejected pill ── */
+    .rejected-row {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+      margin-bottom: 24px;
+    }
+
+    .rejected-label {
+      font-size: 12px;
+      font-weight: 600;
+      color: var(--muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .rejected-pill {
+      background: rgba(248, 113, 113, 0.1);
+      border: 1px solid rgba(248, 113, 113, 0.3);
+      color: var(--rejected);
+      font-family: var(--mono);
+      font-size: 12px;
+      padding: 2px 10px;
+      border-radius: 20px;
+    }
+
+    /* ── Next steps ── */
+    .steps { list-style: none; display: flex; flex-direction: column; gap: 10px; }
+
+    .steps li {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      font-size: 13.5px;
+    }
+
+    .step-dot {
+      width: 20px;
+      height: 20px;
+      border-radius: 50%;
+      border: 2px solid var(--border);
+      flex-shrink: 0;
+      margin-top: 2px;
+    }
+
+    /* ── Stack table ── */
+    .stack-table td:first-child { color: var(--muted); font-size: 12px; width: 160px; }
+
+    /* ── Responsive ── */
+    @media (max-width: 640px) {
+      .video-grid  { grid-template-columns: 1fr; }
+      .diff-grid   { grid-template-columns: 1fr; }
+      .video-grid .full { grid-column: 1; }
+      header h1 { font-size: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>Crowd Segmentation &amp; Movement Tracking</h1>
+  <p>Tracking and segmenting individual people in dense crowds from a static top-down drone perspective, using ground-truth MOT annotations as a baseline.</p>
+  <a class="repo-link" href="https://github.com/k4lif1/dor_seg_exp" target="_blank">
+    <svg height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
+    k4lif1 / dor_seg_exp
+  </a>
+</header>
+
+<main>
+
+  <!-- ── Videos ───────────────────────────────────────────────────── -->
+  <section>
+    <h2>Tracking Visualizations</h2>
+
+    <div class="rejected-row">
+      <span class="rejected-label">Rejected after manual review</span>
+      <span class="rejected-pill">tracking_00011</span>
+      <span class="rejected-pill">tracking_00022</span>
+      <span class="rejected-pill">tracking_train_00008</span>
+    </div>
+
+    <div class="video-grid">
+      <div class="video-card">
+        <video src="videos/tracking_00062.mp4" poster="assets/previews/tracking_00062.jpg" controls preload="none"></video>
+        <div class="caption">
+          <span class="caption-title">Seq 00062</span>
+          <div class="tags">
+            <span class="tag">test</span>
+            <span class="tag">184 tracks</span>
+            <span class="tag">bounding boxes</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="video-card">
+        <video src="videos/tracking_train_00001.mp4" poster="assets/previews/tracking_train_00001.jpg" controls preload="none"></video>
+        <div class="caption">
+          <span class="caption-title">Seq 00001</span>
+          <div class="tags">
+            <span class="tag">train</span>
+            <span class="tag">142 IDs</span>
+            <span class="tag">medium density</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="video-card">
+        <video src="videos/tracking_train_00006.mp4" poster="assets/previews/tracking_train_00006.jpg" controls preload="none"></video>
+        <div class="caption">
+          <span class="caption-title">Seq 00006</span>
+          <div class="tags">
+            <span class="tag">train</span>
+            <span class="tag">433 IDs</span>
+            <span class="tag">dense</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="video-card">
+        <video src="videos/tracking_train_00040.mp4" poster="assets/previews/tracking_train_00040.jpg" controls preload="none"></video>
+        <div class="caption">
+          <span class="caption-title">Seq 00040</span>
+          <div class="tags">
+            <span class="tag">train</span>
+            <span class="tag">150 IDs</span>
+            <span class="tag">varied scene</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="video-card full">
+        <video src="videos/tracking_train_00100.mp4" poster="assets/previews/tracking_train_00100.jpg" controls preload="none"></video>
+        <div class="caption">
+          <span class="caption-title">Seq 00100 — densest validated</span>
+          <div class="tags">
+            <span class="tag">train</span>
+            <span class="tag">514 IDs</span>
+            <span class="tag">densest</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Dataset ──────────────────────────────────────────────────── -->
+  <section>
+    <h2>Dataset — DroneCrowd MOT <a href="https://openaccess.thecvf.com/content/CVPR2021/papers/Wen_Detection_Tracking_and_Counting_Meets_Drones_in_Crowds_A_Benchmark_CVPR_2021_paper.pdf" target="_blank">(VisDrone, CVPR 2021)</a></h2>
+
+    <p>All footage is 1920×1080, 25 fps, captured from a drone at varying altitudes across 70 outdoor scenes. Each sequence is 300 frames (~12 seconds). Download: <a href="https://drive.google.com/drive/folders/1EUKLJ1WmrhWTNGt4wFLyHSfspJAt56WN" target="_blank">Google Drive</a> · <a href="https://pan.baidu.com/s/1hjXoVZJ16y9Tf7UXcJw3oQ" target="_blank">Baidu Yun</a> (code <code>ml1u</code>).</p>
+
+    <table>
+      <thead>
+        <tr>
+          <th>Split</th>
+          <th>Sequences</th>
+          <th>Frames</th>
+          <th>Annotation format</th>
+        </tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td>Train</td>
+          <td>82</td>
+          <td>24,600</td>
+          <td><code>.mat</code> — <code>(x, y, person_id)</code> head points, persistent IDs</td>
+        </tr>
+        <tr>
+          <td>Val</td>
+          <td>30</td>
+          <td>360</td>
+          <td><code>.mat</code> — sparse (12 frames / seq)</td>
+        </tr>
+        <tr>
+          <td>Test</td>
+          <td>30</td>
+          <td>9,000</td>
+          <td><code>.xml</code> — bounding boxes with persistent <code>track_id</code> per frame</td>
+        </tr>
+      </tbody>
+    </table>
+
+    <br>
+    <p><strong>Train set:</strong> 15,347 unique tracked individuals · 147 people per frame on average · up to 455 in the densest scenes · IDs 100% persistent across all 300 frames per sequence.</p>
+  </section>
+
+  <!-- ── Annotation diff ──────────────────────────────────────────── -->
+  <section>
+    <h2>Dataset Annotations vs. What the Scripts Produce</h2>
+
+    <p>The raw dataset ships as images and annotation files — no visualizations. The annotation format differs between splits, and that difference directly affects what the rendering scripts can draw.</p>
+
+    <div class="diff-grid">
+      <div class="diff-card">
+        <h4>Train / Val — <code>.mat</code> head points</h4>
+        <p>One file per frame. Contains a single <code>(N, 3)</code> array with columns <code>x, y, person_id</code>. Only the head centre is recorded — no bounding box. Scripts draw a filled circle at the head position.</p>
+      </div>
+      <div class="diff-card">
+        <h4>Test — <code>.xml</code> bounding boxes</h4>
+        <p>One file per sequence. Each <code>&lt;track id="N"&gt;</code> holds a <code>&lt;box&gt;</code> per frame with <code>xtl, ytl, xbr, ybr</code>, an <code>outside</code> flag, and an <code>occluded</code> flag. Ground-truth boxes — not model predictions.</p>
+      </div>
+    </div>
+
+    <h3>What the rendering scripts add on top</h3>
+    <ul class="layers">
+      <li><strong>Colour assignment</strong> — each <code>person_id</code> maps to a unique BGR colour from an evenly-spaced HSV palette, held constant across all frames.</li>
+      <li><strong>Motion trail</strong> — the last 30 frame-centre positions drawn as a fading polyline, giving a visual sense of direction and speed.</li>
+      <li><strong>ID label</strong> — numeric track ID printed above each annotation with a dark background for readability at high density.</li>
+      <li><strong>HUD</strong> — frame counter, sequence ID, and visible / total counts burned into the top-left corner.</li>
+    </ul>
+  </section>
+
+  <!-- ── Next steps ───────────────────────────────────────────────── -->
+  <section>
+    <h2>Next Steps</h2>
+    <ul class="steps">
+      <li><span class="step-dot"></span><span>Integrate <strong>SAM 3</strong> (Meta, Nov 2025) for pixel-level instance segmentation — text-prompted, unified detect + segment + track in a single forward pass.</span></li>
+      <li><span class="step-dot"></span><span>Source a real live music event video from a static overhead angle — leading candidates: Festival of Lights Lyon (Zenodo, public), BBC Glastonbury webcam archive. Production plan: fixed camera on venue truss.</span></li>
+      <li><span class="step-dot"></span><span>Evaluate <strong>YOLOv8 + ByteTrack</strong> (pretrained on VisDrone) as a faster real-time inference alternative to SAM 3.</span></li>
+      <li><span class="step-dot"></span><span>Flow clustering to detect group movement patterns and crowd pressure buildup.</span></li>
+    </ul>
+  </section>
+
+  <!-- ── Stack ────────────────────────────────────────────────────── -->
+  <section>
+    <h2>Stack</h2>
+    <table class="stack-table">
+      <tbody>
+        <tr><td>Segmentation</td><td>SAM 3 / SAM 3.1</td></tr>
+        <tr><td>Detection + tracking</td><td>YOLOv8 + ByteTrack, pretrained on VisDrone</td></tr>
+        <tr><td>Optical flow</td><td>RAFT</td></tr>
+        <tr><td>Data loading</td><td><code>scipy.io</code>, <code>xml.etree</code>, <code>opencv-python-headless</code></td></tr>
+        <tr><td>Visualization</td><td><code>matplotlib</code>, <code>opencv</code></td></tr>
+        <tr><td>Dataset download</td><td><code>gdown</code></td></tr>
+      </tbody>
+    </table>
+  </section>
+
+</main>
+</body>
+</html>
