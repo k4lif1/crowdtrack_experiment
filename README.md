@@ -98,9 +98,9 @@ Rendered and manually reviewed. Rejected for visual inconsistencies (ID swaps, e
 
 ## Next Steps
 
-- [ ] Run YOLO tracker on all 300 frames and compare track count / coverage against GT
-- [ ] Source a real live music event video from a static overhead angle (Festival of Lights Lyon, Glastonbury webcam archive)
-- [ ] Flow clustering to detect group movement patterns and crowd pressure buildup
+- [ ] Quantitative evaluation — run YOLO tracker on full 300-frame sequences, score against GT with MOTA / MOTP / IDF1
+- [ ] Real venue footage — static overhead recording of a live music event (Festival of Lights Lyon on Zenodo, Glastonbury webcam archive)
+- [ ] Flow clustering — group tracklet velocities to detect crowd pressure buildup, bottlenecks, and directional flow patterns
 
 ---
 
