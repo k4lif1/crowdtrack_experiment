@@ -56,10 +56,10 @@ Manually reviewed; rejected for visible ID swaps or erratic motion: `tracking_00
 | Stage | Unique IDs | Notes |
 |---|---|---|
 | Raw ByteTrack output | **301** | heavy fragmentation — same person gets new ID after each detection miss |
-| After stitch + interpolate | **173** | merge fragments where end→start is close in time and space, fill gaps linearly |
+| After stitch + interpolate | **189** | merge fragments where end→start is close in time and space, fill gaps linearly |
 | GT (target) | **184** | |
 
-The stitch step closes 128 fragment merges and interpolates 1,501 missing-frame boxes. The remaining gap to GT (184 vs 173) is largely from people the detector never sees in the first 60 frames — the bottleneck is detection recall, not tracking.
+The stitch step closes 112 fragment merges and interpolates 1,413 missing-frame boxes. Stitching uses two compatibility checks: a relative bound (`box_size × time_gap × 0.5`) and an absolute velocity cap (12 px/frame ≈ fast running) — the latter prevents large boxes teleporting across the frame purely because they're large. The remaining gap to GT (189 vs 184) is mostly detection recall, not tracking.
 
 ### Running it
 

@@ -66,14 +66,18 @@ def make_color(track_id: int) -> tuple[int, int, int]:
 
 def stitch_and_interpolate(raw_tracks: dict[int, list[tuple]],
                            max_gap: int,
-                           dist_factor: float
+                           dist_factor: float,
+                           max_vel_px: float
                            ) -> tuple[dict[int, dict[int, tuple]], int, int]:
     """
     Two-stage post-processing on fragmented tracks:
 
     1. **Stitch**: greedily link fragments where track A ends and track B starts
-       within `max_gap` frames at a spatial distance ≤ box_size × time_gap × dist_factor.
-       Both fragments become one track under A's ID.
+       within `max_gap` frames. Two compatibility checks must both pass:
+         a) relative:  dist ≤ box_size × time_gap × dist_factor
+         b) absolute:  dist ≤ max_vel_px × time_gap     (px/frame velocity cap)
+       The absolute cap stops large boxes from getting stitched across long
+       distances purely because they're large.
     2. **Interpolate**: fill any internal gaps in each (now-stitched) track with
        linear interpolation of the box corners.
 
@@ -124,11 +128,13 @@ def stitch_and_interpolate(raw_tracks: dict[int, list[tuple]],
             cx_b = (cb[0] + cb[2]) / 2
             cy_b = (cb[1] + cb[3]) / 2
             dist = ((cx_a - cx_b) ** 2 + (cy_a - cy_b) ** 2) ** 0.5
-            # Allowed motion scales with box size and time gap (px/frame)
-            if dist > size_a * time_gap * dist_factor:
+            # Both compatibility checks must pass
+            allowed_relative = size_a   * time_gap * dist_factor
+            allowed_absolute = max_vel_px * time_gap
+            if dist > min(allowed_relative, allowed_absolute):
                 continue
-            # Combined score: closer in time and space is better
-            score = dist + time_gap * size_a * 0.3
+            # Score: heavily penalise distance (px) over time gap (frames)
+            score = dist + time_gap * 2.0
             if score < best_score:
                 best, best_score = cand, score
 
@@ -222,7 +228,8 @@ def render_frame(img: np.ndarray,
 def run(seq_id: str, num_frames: int, conf: float, use_sahi: bool,
         slice_size: int, out_dir: str,
         lost_buffer: int, match_thresh: float,
-        stitch_gap: int, stitch_dist_factor: float) -> None:
+        stitch_gap: int, stitch_dist_factor: float,
+        stitch_max_vel: float) -> None:
 
     import torch
     device = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -317,9 +324,11 @@ def run(seq_id: str, num_frames: int, conf: float, use_sahi: bool,
     print(f"Raw tracker output: {raw_id_count} fragmented tracks")
 
     # ── Stitch + interpolate ──────────────────────────────────────────────────
-    print(f"Stitching fragments (max gap: {stitch_gap}f, dist factor: {stitch_dist_factor}) ...")
+    print(f"Stitching (max gap: {stitch_gap}f, dist factor: {stitch_dist_factor}, "
+          f"max vel: {stitch_max_vel}px/f) ...")
     stitched, n_merges, n_interp = stitch_and_interpolate(
         raw_tracks, max_gap=stitch_gap, dist_factor=stitch_dist_factor,
+        max_vel_px=stitch_max_vel,
     )
     print(f"Stitched {n_merges} fragment merges → {len(stitched)} canonical tracks")
     print(f"Interpolated {n_interp} frames to fill gaps")
@@ -384,9 +393,12 @@ def parse_args():
     p.add_argument("--stitch-gap",   type=int,   default=15,   metavar="N",
                    help="Max time gap (frames) between fragment end and start to consider stitching "
                         "(default: 15 = 0.6s). Set to 0 to disable stitching+interpolation.")
-    p.add_argument("--stitch-dist",  type=float, default=2.5,  metavar="F",
-                   help="Spatial-distance factor for stitching: max_dist = box_size × time_gap × this "
-                        "(default: 2.5; lower = stricter spatial match).")
+    p.add_argument("--stitch-dist",  type=float, default=0.5,  metavar="F",
+                   help="Relative-distance factor for stitching: max_dist ≤ box_size × time_gap × this "
+                        "(default: 0.5).")
+    p.add_argument("--stitch-vel",   type=float, default=12.0, metavar="PX",
+                   help="Absolute velocity cap for stitching in px/frame (default: 12 px/frame "
+                        "≈ 300 px/s = fast running). Prevents large boxes teleporting.")
     p.add_argument("--out",          default="videos/yolo_tracking", metavar="DIR",
                    help="Output directory (default: videos/yolo_tracking/)")
     return p.parse_args()
@@ -397,4 +409,4 @@ if __name__ == "__main__":
     run(args.seq.zfill(5), args.frames, args.conf,
         not args.no_sahi, args.slice_size, args.out,
         args.lost_buffer, args.match_thresh,
-        args.stitch_gap, args.stitch_dist)
+        args.stitch_gap, args.stitch_dist, args.stitch_vel)
