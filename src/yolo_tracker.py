@@ -62,18 +62,133 @@ def make_color(track_id: int) -> tuple[int, int, int]:
 
 # ── Renderer ────────────────────────────────────────────────────────────────
 
+# ── Track stitching + interpolation ──────────────────────────────────────────
+
+def stitch_and_interpolate(raw_tracks: dict[int, list[tuple]],
+                           max_gap: int,
+                           dist_factor: float
+                           ) -> tuple[dict[int, dict[int, tuple]], int, int]:
+    """
+    Two-stage post-processing on fragmented tracks:
+
+    1. **Stitch**: greedily link fragments where track A ends and track B starts
+       within `max_gap` frames at a spatial distance ≤ box_size × time_gap × dist_factor.
+       Both fragments become one track under A's ID.
+    2. **Interpolate**: fill any internal gaps in each (now-stitched) track with
+       linear interpolation of the box corners.
+
+    Returns
+    -------
+    stitched_tracks : {canonical_tid: {frame_idx: (x1,y1,x2,y2, score, is_interp_flag)}}
+    n_stitched      : number of fragment merges applied
+    n_interpolated  : total number of interpolated frames added
+    """
+    # Compute per-track endpoints (first and last detection)
+    endpoints = {}
+    for tid, dets in raw_tracks.items():
+        if not dets:
+            continue
+        dets_sorted = sorted(dets, key=lambda d: d[0])
+        endpoints[tid] = {
+            "first":   dets_sorted[0][0],
+            "last":    dets_sorted[-1][0],
+            "fbox":    dets_sorted[0][1:5],
+            "lbox":    dets_sorted[-1][1:5],
+            "history": dets_sorted,
+        }
+
+    # Greedy stitch: for each track in order of last_frame, find the best follower.
+    # Followers are tracks starting after our end, within max_gap, at plausible distance.
+    merge: dict[int, int] = {}   # follower_tid -> base_tid
+    used:  set[int] = set()
+    sorted_by_end = sorted(endpoints.keys(), key=lambda t: endpoints[t]["last"])
+
+    for base in sorted_by_end:
+        if base in used:
+            continue
+        cur_last = endpoints[base]["last"]
+        cur_lbox = endpoints[base]["lbox"]
+        cx_a = (cur_lbox[0] + cur_lbox[2]) / 2
+        cy_a = (cur_lbox[1] + cur_lbox[3]) / 2
+        size_a = ((cur_lbox[2] - cur_lbox[0]) + (cur_lbox[3] - cur_lbox[1])) / 2
+
+        best, best_score = None, float("inf")
+        for cand in sorted_by_end:
+            if cand == base or cand in used or cand in merge:
+                continue
+            cf = endpoints[cand]["first"]
+            time_gap = cf - cur_last
+            if time_gap <= 0 or time_gap > max_gap:
+                continue
+            cb = endpoints[cand]["fbox"]
+            cx_b = (cb[0] + cb[2]) / 2
+            cy_b = (cb[1] + cb[3]) / 2
+            dist = ((cx_a - cx_b) ** 2 + (cy_a - cy_b) ** 2) ** 0.5
+            # Allowed motion scales with box size and time gap (px/frame)
+            if dist > size_a * time_gap * dist_factor:
+                continue
+            # Combined score: closer in time and space is better
+            score = dist + time_gap * size_a * 0.3
+            if score < best_score:
+                best, best_score = cand, score
+
+        if best is not None:
+            merge[best] = base
+            used.add(best)
+
+    # Resolve transitive merges (B→A, C→B should give C→A)
+    def resolve(t):
+        while t in merge:
+            t = merge[t]
+        return t
+
+    # Combine histories under canonical IDs
+    combined: dict[int, list[tuple]] = defaultdict(list)
+    for tid, ep in endpoints.items():
+        combined[resolve(tid)].extend(ep["history"])
+
+    # Interpolate gaps within each canonical track
+    out: dict[int, dict[int, tuple]] = {}
+    n_interp = 0
+    for tid, dets in combined.items():
+        dets = sorted(set((d[0],) + d[1:] for d in dets))   # dedupe by frame
+        timeline: dict[int, tuple] = {}
+        # Start with all real detections (is_interp = False)
+        for d in dets:
+            fi = d[0]
+            timeline[fi] = (d[1], d[2], d[3], d[4], d[5], False)
+        # Walk consecutive real detections and fill gaps linearly
+        real_frames = sorted(timeline.keys())
+        for a, b in zip(real_frames[:-1], real_frames[1:]):
+            gap = b - a - 1
+            if gap <= 0:
+                continue
+            xa = timeline[a]; xb = timeline[b]
+            for k in range(1, gap + 1):
+                t = k / (gap + 1)
+                box = tuple(xa[i] + t * (xb[i] - xa[i]) for i in range(4))
+                score = xa[4] + t * (xb[4] - xa[4])
+                timeline[a + k] = box + (score, True)
+                n_interp += 1
+        out[tid] = timeline
+
+    return out, len(merge), n_interp
+
+
 def render_frame(img: np.ndarray,
-                 tracks: list[tuple],           # [(track_id, x1,y1,x2,y2, conf), ...]
+                 tracks: list[tuple],           # [(track_id, x1,y1,x2,y2, conf, is_interp), ...]
                  history: dict[int, deque],
                  frame_idx: int,
                  seq_id: str,
                  total_ever: int) -> np.ndarray:
+    """Same rendering format as tracking_visualizer.py render_frame_test for direct
+    side-by-side comparison: same colour hash, same trail, same dark-background ID label."""
     canvas = img.copy()
-    h, w   = canvas.shape[:2]
 
-    for (track_id, x1, y1, x2, y2, conf) in tracks:
+    for t in tracks:
+        track_id, x1, y1, x2, y2 = t[0], t[1], t[2], t[3], t[4]
         color = make_color(track_id)
-        cx, cy = int((x1 + x2) / 2), int((y1 + y2) / 2)
+        cx    = int((x1 + x2) / 2)
 
         # Motion trail
         pts = list(history[track_id])
@@ -83,10 +198,10 @@ def render_frame(img: np.ndarray,
             cv2.line(canvas, pts[i - 1], pts[i], t_color,
                      max(1, int(2 * alpha)), cv2.LINE_AA)
 
-        # Bounding box
+        # Bounding box (always 2px — YOLO has no occluded flag)
         cv2.rectangle(canvas, (int(x1), int(y1)), (int(x2), int(y2)), color, 2)
 
-        # ID label
+        # ID label with dark background (matches tracking_visualizer style)
         label = str(track_id)
         font  = cv2.FONT_HERSHEY_SIMPLEX
         (lw, lh), base = cv2.getTextSize(label, font, LABEL_SCALE, 1)
@@ -96,8 +211,8 @@ def render_frame(img: np.ndarray,
         cv2.putText(canvas, label, (lx, ly), font, LABEL_SCALE, color, 1, cv2.LINE_AA)
 
     cv2.putText(canvas,
-                f"YOLO+ByteTrack  |  Frame {frame_idx + 1:03d}  |  Seq {seq_id}  |  "
-                f"{len(tracks)} active  |  {total_ever} total IDs",
+                f"YOLO  |  Frame {frame_idx + 1:03d}  |  Seq {seq_id}  |  "
+                f"{len(tracks)} tracked  |  {total_ever} total IDs",
                 (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (255, 255, 255), 1, cv2.LINE_AA)
     return canvas
 
@@ -105,7 +220,9 @@ def render_frame(img: np.ndarray,
 # ── Main pipeline ────────────────────────────────────────────────────────────
 
 def run(seq_id: str, num_frames: int, conf: float, use_sahi: bool,
-        slice_size: int, out_dir: str) -> None:
+        slice_size: int, out_dir: str,
+        lost_buffer: int, match_thresh: float,
+        stitch_gap: int, stitch_dist_factor: float) -> None:
 
     import torch
     device = "mps" if torch.backends.mps.is_available() else "cpu"
@@ -136,10 +253,11 @@ def run(seq_id: str, num_frames: int, conf: float, use_sahi: bool,
     from supervision import ByteTrack, Detections
     tracker = ByteTrack(
         track_activation_threshold=conf,
-        lost_track_buffer=30,
-        minimum_matching_threshold=0.7,
+        lost_track_buffer=lost_buffer,
+        minimum_matching_threshold=match_thresh,
         frame_rate=FPS,
     )
+    print(f"ByteTrack: activation={conf}  lost_buffer={lost_buffer}f  match_thresh={match_thresh}")
 
     # ── Load frames ──────────────────────────────────────────────────────────
     seq_num    = int(seq_id)
@@ -152,29 +270,23 @@ def run(seq_id: str, num_frames: int, conf: float, use_sahi: bool,
     # Read first frame for resolution
     probe = cv2.imread(os.path.join(IMG_DIR, f"img{seq_num:03d}001.jpg"))
     h, w  = probe.shape[:2]
-    writer = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"mp4v"), FPS, (w, h))
 
-    history: dict[int, deque] = defaultdict(lambda: deque(maxlen=TRAIL_FRAMES))
-    all_ids: set[int] = set()
+    # ── Pass 1: detection + tracking, accumulate raw track data ───────────────
+    raw_tracks: dict[int, list[tuple]] = defaultdict(list)
+    print("Pass 1/2: Detection + tracking ...")
 
     for fi in tqdm(range(num_frames), unit="frame"):
         img_path = os.path.join(IMG_DIR, f"img{seq_num:03d}{fi + 1:03d}.jpg")
         img_bgr  = cv2.imread(img_path)
         if img_bgr is None:
-            writer.write(np.zeros((h, w, 3), dtype=np.uint8))
             continue
 
-        # ── Detection ────────────────────────────────────────────────────────
         if use_sahi:
             result = get_sliced_prediction(
-                image=img_path,
-                detection_model=sahi_model,
-                slice_height=slice_size,
-                slice_width=slice_size,
-                overlap_height_ratio=0.2,
-                overlap_width_ratio=0.2,
-                perform_standard_pred=True,
-                postprocess_match_threshold=0.5,
+                image=img_path, detection_model=sahi_model,
+                slice_height=slice_size, slice_width=slice_size,
+                overlap_height_ratio=0.2, overlap_width_ratio=0.2,
+                perform_standard_pred=True, postprocess_match_threshold=0.5,
                 verbose=0,
             )
             boxes, scores, class_ids = [], [], []
@@ -185,38 +297,63 @@ def run(seq_id: str, num_frames: int, conf: float, use_sahi: bool,
                 boxes.append([bb.minx, bb.miny, bb.maxx, bb.maxy])
                 scores.append(obj.score.value)
                 class_ids.append(obj.category.id)
-            if boxes:
-                dets = Detections(
-                    xyxy=np.array(boxes, dtype=np.float32),
-                    confidence=np.array(scores, dtype=np.float32),
-                    class_id=np.array(class_ids, dtype=int),
-                )
-            else:
-                dets = Detections.empty()
+            dets = Detections(xyxy=np.array(boxes, np.float32),
+                              confidence=np.array(scores, np.float32),
+                              class_id=np.array(class_ids, int)) if boxes else Detections.empty()
         else:
             results = model(img_bgr, conf=conf, verbose=False)[0]
             dets    = Detections.from_ultralytics(results)
             mask    = np.isin(dets.class_id, list(PERSON_CLASSES))
             dets    = dets[mask]
 
-        # ── Track ─────────────────────────────────────────────────────────────
         tracked = tracker.update_with_detections(dets)
-
-        active: list[tuple] = []
         for i in range(len(tracked)):
             tid  = int(tracked.tracker_id[i])
             x1, y1, x2, y2 = tracked.xyxy[i]
             score = float(tracked.confidence[i]) if tracked.confidence is not None else 1.0
-            cx, cy = int((x1 + x2) / 2), int((y1 + y2) / 2)
+            raw_tracks[tid].append((fi, float(x1), float(y1), float(x2), float(y2), score))
+
+    raw_id_count = len(raw_tracks)
+    print(f"Raw tracker output: {raw_id_count} fragmented tracks")
+
+    # ── Stitch + interpolate ──────────────────────────────────────────────────
+    print(f"Stitching fragments (max gap: {stitch_gap}f, dist factor: {stitch_dist_factor}) ...")
+    stitched, n_merges, n_interp = stitch_and_interpolate(
+        raw_tracks, max_gap=stitch_gap, dist_factor=stitch_dist_factor,
+    )
+    print(f"Stitched {n_merges} fragment merges → {len(stitched)} canonical tracks")
+    print(f"Interpolated {n_interp} frames to fill gaps")
+
+    # ── Pass 2: render with stitched + interpolated tracks ────────────────────
+    print("Pass 2/2: Rendering ...")
+    writer = cv2.VideoWriter(out_path, cv2.VideoWriter_fourcc(*"mp4v"), FPS, (w, h))
+    history: dict[int, deque] = defaultdict(lambda: deque(maxlen=TRAIL_FRAMES))
+
+    # Reorganise: per-frame list of (tid, x1, y1, x2, y2, score, is_interp)
+    frame_tracks: dict[int, list[tuple]] = defaultdict(list)
+    for tid, timeline in stitched.items():
+        for fi, (x1, y1, x2, y2, score, is_interp) in timeline.items():
+            frame_tracks[fi].append((tid, x1, y1, x2, y2, score, is_interp))
+
+    all_ids: set[int] = set()
+    for fi in tqdm(range(num_frames), unit="frame"):
+        img_path = os.path.join(IMG_DIR, f"img{seq_num:03d}{fi + 1:03d}.jpg")
+        img_bgr  = cv2.imread(img_path)
+        if img_bgr is None:
+            writer.write(np.zeros((h, w, 3), dtype=np.uint8))
+            continue
+        active = frame_tracks.get(fi, [])
+        for t in active:
+            tid = t[0]
+            cx  = int((t[1] + t[3]) / 2)
+            cy  = int((t[2] + t[4]) / 2)
             history[tid].append((cx, cy))
             all_ids.add(tid)
-            active.append((tid, x1, y1, x2, y2, score))
-
         frame = render_frame(img_bgr, active, history, fi, seq_id, len(all_ids))
         writer.write(frame)
 
     writer.release()
-    print(f"\nTracked {len(all_ids)} unique IDs across {num_frames} frames")
+    print(f"\nFinal: {len(all_ids)} unique IDs (down from {raw_id_count} raw fragments)")
     print(f"Done → {out_path}")
 
 
@@ -232,13 +369,25 @@ def parse_args():
                    help="Zero-padded test sequence ID (default: 00062)")
     p.add_argument("--frames",     type=int, default=60, metavar="N",
                    help="Number of frames to process (default: 60, max: 300)")
-    p.add_argument("--conf",       type=float, default=0.2, metavar="F",
+    p.add_argument("--conf",         type=float, default=0.2,  metavar="F",
                    help="Detection confidence threshold (default: 0.2)")
-    p.add_argument("--no-sahi",    action="store_true",
+    p.add_argument("--no-sahi",      action="store_true",
                    help="Disable SAHI sliced inference (faster but misses small people)")
-    p.add_argument("--slice-size", type=int, default=640, metavar="PX",
-                   help="SAHI tile size in pixels (default: 640)")
-    p.add_argument("--out",        default="videos/yolo_tracking", metavar="DIR",
+    p.add_argument("--slice-size",   type=int,   default=640,  metavar="PX",
+                   help="SAHI tile size in px (default: 640). Smaller (320) gives higher recall "
+                        "but boxes jitter across tile boundaries → ByteTrack fragments tracks. "
+                        "640 was empirically the best balance on DroneCrowd.")
+    p.add_argument("--lost-buffer",  type=int,   default=30,   metavar="N",
+                   help="ByteTrack lost-track keep-alive in frames (default: 30 = 1.2s).")
+    p.add_argument("--match-thresh", type=float, default=0.7,  metavar="F",
+                   help="ByteTrack IoU matching threshold (default: 0.7).")
+    p.add_argument("--stitch-gap",   type=int,   default=15,   metavar="N",
+                   help="Max time gap (frames) between fragment end and start to consider stitching "
+                        "(default: 15 = 0.6s). Set to 0 to disable stitching+interpolation.")
+    p.add_argument("--stitch-dist",  type=float, default=2.5,  metavar="F",
+                   help="Spatial-distance factor for stitching: max_dist = box_size × time_gap × this "
+                        "(default: 2.5; lower = stricter spatial match).")
+    p.add_argument("--out",          default="videos/yolo_tracking", metavar="DIR",
                    help="Output directory (default: videos/yolo_tracking/)")
     return p.parse_args()
 
@@ -246,4 +395,6 @@ def parse_args():
 if __name__ == "__main__":
     args = parse_args()
     run(args.seq.zfill(5), args.frames, args.conf,
-        not args.no_sahi, args.slice_size, args.out)
+        not args.no_sahi, args.slice_size, args.out,
+        args.lost_buffer, args.match_thresh,
+        args.stitch_gap, args.stitch_dist)

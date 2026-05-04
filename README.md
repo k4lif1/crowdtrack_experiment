@@ -1,5 +1,15 @@
 # Crowd Tracking — DroneCrowd POC
 
+## What you're looking at
+
+The five videos below are rendered by `src/tracking_visualizer.py` from the **ground-truth annotations** that ship with the DroneCrowd dataset. The script reads the XML/`.mat` files, draws colour-coded boxes (or head dots) per `person_id`, adds motion trails and a HUD, and exports an MP4 — pure visualization, no model involved.
+
+**The work in progress** (see [Reconstruction pipeline](#reconstruction-pipeline) below) is reproducing those same results from the raw video using detection + tracking. Once it works end-to-end, the same pipeline runs on any overhead crowd video — not just sequences that ship with annotations.
+
+---
+
+## Ground-truth videos (rendered from dataset annotations)
+
 <table>
   <tr>
     <td align="center" width="50%">
@@ -29,6 +39,43 @@
   </tr>
 </table>
 
+Manually reviewed; rejected for visible ID swaps or erratic motion: `tracking_00011`, `tracking_00022`, `tracking_train_00008`.
+
+---
+
+## Reconstruction pipeline
+
+`src/yolo_tracker.py` reproduces the GT tracking format from raw video alone — no annotations, just pixels. Three stages:
+
+1. **YOLOv8l fine-tuned on VisDrone** ([mshamrai/yolov8l-visdrone](https://huggingface.co/mshamrai/yolov8l-visdrone)) — same dataset family as our footage.
+2. **SAHI sliced inference** — slice each 1920×1080 frame into overlapping 640×640 tiles before detection so YOLO sees a useful pixel density on tiny aerial people.
+3. **ByteTrack + post-processing** — assigns IDs across frames, then a custom stitch + interpolate pass merges fragments that drop and reappear nearby.
+
+### Latest result (seq 00062, first 60 frames)
+
+| Stage | Unique IDs | Notes |
+|---|---|---|
+| Raw ByteTrack output | **301** | heavy fragmentation — same person gets new ID after each detection miss |
+| After stitch + interpolate | **173** | merge fragments where end→start is close in time and space, fill gaps linearly |
+| GT (target) | **184** | |
+
+The stitch step closes 128 fragment merges and interpolates 1,501 missing-frame boxes. The remaining gap to GT (184 vs 173) is largely from people the detector never sees in the first 60 frames — the bottleneck is detection recall, not tracking.
+
+### Running it
+
+```bash
+source venv_sam3/bin/activate
+
+python src/yolo_tracker.py --seq 00062 --frames 60          # ~30s on M4 Pro MPS
+python src/yolo_tracker.py --seq 00062 --frames 300         # full sequence
+python src/yolo_tracker.py --seq 00062 --stitch-gap 0       # disable stitching to compare
+
+# Side-by-side GT vs reconstruction:
+python src/compare.py videos/gt_tracking/tracking_00062.mp4 \
+                      videos/yolo_tracking/yolo_00062.mp4 \
+                      --out videos/comparison/compare_00062.mp4
+```
+
 ---
 
 ## Dataset — DroneCrowd MOT (VisDrone, CVPR 2021)
@@ -47,15 +94,7 @@ Train: 15,347 unique IDs · 147 people/frame avg · up to 455 in the densest sce
 
 Download: [Google Drive](https://drive.google.com/drive/folders/1EUKLJ1WmrhWTNGt4wFLyHSfspJAt56WN) · [Baidu Yun](https://pan.baidu.com/s/1hjXoVZJ16y9Tf7UXcJw3oQ) (code `ml1u`) → `data/dronecrowd/mot_full/`
 
----
-
-## Annotation formats
-
-**Train/Val** — one `.mat` per frame, `(N, 3)` array: `[x, y, person_id]`. Head centre only, no bounding box. Scripts draw a filled circle.
-
-**Test** — one `.xml` per sequence. Each `<track id="N">` holds a `<box>` per frame: `xtl, ytl, xbr, ybr`, `outside`, `occluded`. Ground-truth boxes, not predictions.
-
-Both formats get the same rendering layers: per-ID HSV colour, 30-frame fading motion trail, ID label, frame-count HUD.
+**Annotation formats** — train/val store one `.mat` per frame with head-only `(x, y, person_id)`; test stores one XML per sequence with full `xtl, ytl, xbr, ybr` boxes plus `outside` and `occluded` flags. The visualizer handles both.
 
 ---
 
@@ -64,43 +103,29 @@ Both formats get the same rendering layers: per-ID HSV colour, 30-frame fading m
 ```
 videos/
   source/         Raw frames — no overlays
-  gt_tracking/    Ground-truth annotations (boxes / head dots, colour-coded per ID)
-  yolo_tracking/  Model predictions — YOLOv8-VisDrone + SAHI + ByteTrack (no GT used)
+  gt_tracking/    Dataset annotations rendered as colour-coded ID boxes + trails
+  yolo_tracking/  Pipeline reconstruction — YOLO + SAHI + ByteTrack + stitching
+  comparison/     Side-by-side GT vs reconstruction
 ```
 
 ---
 
 ## Scripts
 
-```bash
-# GT annotation overlay → videos/gt_tracking/
-python src/tracking_visualizer.py --split test --seq 00062
-python src/tracking_visualizer.py --split train --seq 00001 00006 00040 00100
-
-# Raw source video (no annotations) → videos/source/
-python src/tracking_visualizer.py --split test --seq 00062 --raw
-
-# YOLO+SAHI+ByteTrack prediction → videos/yolo_tracking/
-source venv_sam3/bin/activate
-python src/yolo_tracker.py --seq 00062 --frames 60
-python src/yolo_tracker.py --seq 00062 --frames 300 --conf 0.2
 ```
-
-**`yolo_tracker.py`** — YOLOv8l fine-tuned on VisDrone ([mshamrai/yolov8l-visdrone](https://huggingface.co/mshamrai/yolov8l-visdrone)), sliced through SAHI (640×640 tiles, 20% overlap) to handle tiny aerial people, tracked with ByteTrack. Runs on MPS (Apple Silicon) at ~2 fps.
-
----
-
-## Validated GT videos
-
-Rendered and manually reviewed. Rejected for visual inconsistencies (ID swaps, erratic jumps): `tracking_00011`, `tracking_00022`, `tracking_train_00008`.
+src/
+  tracking_visualizer.py    GT renderer — read XML/.mat, draw IDs, write MP4
+  yolo_tracker.py           Reconstruction pipeline — raw video → tracked IDs
+  compare.py                Side-by-side video stack of any two outputs
+```
 
 ---
 
 ## Next Steps
 
-- [ ] Quantitative evaluation — run YOLO tracker on full 300-frame sequences, score against GT with MOTA / MOTP / IDF1
-- [ ] Real venue footage — static overhead recording of a live music event (Festival of Lights Lyon on Zenodo, Glastonbury webcam archive)
-- [ ] Flow clustering — group tracklet velocities to detect crowd pressure buildup, bottlenecks, and directional flow patterns
+- [ ] Run the reconstruction pipeline on full 300-frame sequences and score MOTA / MOTP / IDF1 against GT
+- [ ] Apply the pipeline to a real venue recording (static overhead camera, music event) — the eventual production target
+- [ ] Flow clustering on tracked velocities to detect crowd pressure, bottlenecks, directional flow
 
 ---
 
@@ -110,6 +135,6 @@ Rendered and manually reviewed. Rejected for visual inconsistencies (ID swaps, e
 |-------|------|
 | Detection | YOLOv8l, fine-tuned on VisDrone |
 | Sliced inference | SAHI (640×640 tiles) |
-| Tracking | ByteTrack (via supervision) |
+| Tracking | ByteTrack via `supervision`, custom stitching pass |
 | Data loading | `scipy.io`, `xml.etree`, `opencv-python-headless` |
-| Visualization | `opencv`, `matplotlib` |
+| Visualization | `opencv` |

@@ -277,7 +277,7 @@
 
 <header>
   <h1>Crowd Tracking — DroneCrowd POC</h1>
-  <p>Individual person detection and tracking in dense overhead drone footage, using the VisDrone MOT benchmark as ground truth.</p>
+  <p>The videos below are rendered by <code>tracking_visualizer.py</code> from the dataset's ground-truth annotations — pure visualization, no model. The <a href="#pipeline">work in progress</a> is a pipeline that reproduces those tracks from raw video alone, so the same analysis can run on any overhead crowd footage, not just sequences that ship with annotations.</p>
   <a class="repo-link" href="https://github.com/k4lif1/crowdtrack_experiment" target="_blank">
     <svg height="16" viewBox="0 0 16 16" fill="currentColor"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"/></svg>
     k4lif1 / crowdtrack_experiment
@@ -289,7 +289,7 @@
   <!-- ── GT Tracking Videos ──────────────────────────────────────── -->
   <section>
     <h2>Ground-Truth Tracking</h2>
-    <p>Rendered from the DroneCrowd XML / .mat annotations. Each person ID gets a consistent colour across all 300 frames. <a href="https://openaccess.thecvf.com/content/CVPR2021/papers/Wen_Detection_Tracking_and_Counting_Meets_Drones_in_Crowds_A_Benchmark_CVPR_2021_paper.pdf" target="_blank">VisDrone CVPR 2021</a>.</p>
+    <p>Each video is the dataset's annotations rendered as overlays — boxes for the test split, head dots for train. Per-ID colour is constant across all 300 frames. The script reads the XML/<code>.mat</code> files and produces the MP4. From <a href="https://openaccess.thecvf.com/content/CVPR2021/papers/Wen_Detection_Tracking_and_Counting_Meets_Drones_in_Crowds_A_Benchmark_CVPR_2021_paper.pdf" target="_blank">VisDrone CVPR 2021</a>.</p>
 
     <div class="rejected-row">
       <span class="rejected-label">Rejected after manual review</span>
@@ -370,15 +370,35 @@
     </div>
   </section>
 
-  <!-- ── Model Tracking ───────────────────────────────────────────── -->
-  <section>
-    <h2>Model Tracking — YOLOv8 + SAHI + ByteTrack</h2>
-    <p>YOLOv8l fine-tuned on VisDrone, sliced via SAHI (640×640 tiles, 20% overlap) to handle tiny aerial people, tracked with ByteTrack. No ground-truth input. Runs on Apple Silicon MPS at ~2 fps.</p>
+  <!-- ── Reconstruction Pipeline ──────────────────────────────────── -->
+  <section id="pipeline">
+    <h2>Reconstruction pipeline (work in progress)</h2>
+    <p>Goal: reproduce the tracks above from raw video alone — no annotations — so the same analysis runs on any overhead crowd footage. Three stages, all on Apple Silicon MPS:</p>
     <ul class="layers">
-      <li><strong>SAHI</strong> — slices each 1920×1080 frame into overlapping tiles before detection; standard technique for small-object aerial inference.</li>
-      <li><strong>YOLOv8l-VisDrone</strong> — <a href="https://huggingface.co/mshamrai/yolov8l-visdrone" target="_blank">mshamrai/yolov8l-visdrone</a>, trained on the same benchmark as the footage.</li>
-      <li><strong>ByteTrack</strong> — assigns consistent IDs across frames using IoU + Kalman filter motion prediction.</li>
+      <li><strong>YOLOv8l-VisDrone</strong> — <a href="https://huggingface.co/mshamrai/yolov8l-visdrone" target="_blank">mshamrai/yolov8l-visdrone</a>, fine-tuned on the same benchmark family as the footage.</li>
+      <li><strong>SAHI sliced inference</strong> — each 1920×1080 frame is split into overlapping 640×640 tiles before detection; necessary because aerial people are 25–30 px tall.</li>
+      <li><strong>ByteTrack + custom stitching pass</strong> — ByteTrack assigns IDs across frames, then a post-processing step links fragmented tracks (where the same person dropped out and re-appeared nearby) and linearly interpolates the missing-frame boxes.</li>
     </ul>
+
+    <h3>Latest result · seq 00062 · first 60 frames</h3>
+    <table>
+      <thead><tr><th>Stage</th><th>Unique IDs</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>Raw ByteTrack output</td><td>301</td><td>heavy fragmentation — every detection miss spawns a new ID</td></tr>
+        <tr><td>+ stitch &amp; interpolate</td><td><strong>173</strong></td><td>128 fragment merges; 1,501 interpolated frames</td></tr>
+        <tr><td>GT (target)</td><td>184</td><td>—</td></tr>
+      </tbody>
+    </table>
+    <br>
+    <div class="video-grid">
+      <div class="video-card full">
+        <video src="videos/comparison/compare_00062.mp4" controls preload="none"></video>
+        <div class="caption">
+          <span class="caption-title">Side-by-side · GT (left) vs reconstruction (right)</span>
+          <div class="tags"><span class="tag">seq 00062</span><span class="tag">60 frames</span><span class="tag">stitched + interpolated</span></div>
+        </div>
+      </div>
+    </div>
   </section>
 
   <!-- ── Stack ────────────────────────────────────────────────────── -->
@@ -388,9 +408,9 @@
       <tbody>
         <tr><td>Detection</td><td>YOLOv8l, fine-tuned on VisDrone</td></tr>
         <tr><td>Sliced inference</td><td>SAHI (640×640 tiles)</td></tr>
-        <tr><td>Tracking</td><td>ByteTrack via <code>supervision</code></td></tr>
+        <tr><td>Tracking</td><td>ByteTrack via <code>supervision</code> + custom stitching pass</td></tr>
         <tr><td>Data loading</td><td><code>scipy.io</code>, <code>xml.etree</code>, <code>opencv</code></td></tr>
-        <tr><td>Visualization</td><td><code>opencv</code>, <code>matplotlib</code></td></tr>
+        <tr><td>Visualization</td><td><code>opencv</code></td></tr>
       </tbody>
     </table>
   </section>
@@ -399,9 +419,9 @@
   <section>
     <h2>Next Steps</h2>
     <ul class="steps">
-      <li><span class="step-dot"></span><span>Quantitative evaluation — run YOLO tracker on full 300-frame sequences and score against GT annotations using MOTA / MOTP / IDF1.</span></li>
-      <li><span class="step-dot"></span><span>Real venue footage — source a static overhead camera recording of a live music event (Festival of Lights Lyon on Zenodo, Glastonbury webcam archive) to validate beyond the drone benchmark.</span></li>
-      <li><span class="step-dot"></span><span>Flow clustering — group tracklet velocities to detect crowd pressure buildup, bottlenecks, and directional flow patterns.</span></li>
+      <li><span class="step-dot"></span><span>Run the reconstruction pipeline on full 300-frame sequences and score MOTA / MOTP / IDF1 against GT.</span></li>
+      <li><span class="step-dot"></span><span>Apply the pipeline to a real venue recording (static overhead camera, music event) — the eventual production target.</span></li>
+      <li><span class="step-dot"></span><span>Flow clustering on tracked velocities to detect crowd pressure, bottlenecks, directional flow.</span></li>
     </ul>
   </section>
 

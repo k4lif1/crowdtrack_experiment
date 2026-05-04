@@ -82,8 +82,20 @@ LABEL_SCALE   = 0.36  # font scale for ID labels
 
 # ── Colour palette ─────────────────────────────────────────────────────────────
 
+def make_color(track_id: int) -> tuple[int, int, int]:
+    """Deterministic BGR colour for a given track_id. Same hash used by yolo_tracker.py
+    so GT and YOLO videos render the same colour space (different IDs → different colours,
+    but the colour distribution looks identical for fair side-by-side comparison)."""
+    hue = int(180 * (track_id % 256) / 256)
+    hsv = np.uint8([[[hue, 215, 215]]])
+    bgr = cv2.cvtColor(hsv, cv2.COLOR_HSV2BGR)[0][0]
+    return (int(bgr[0]), int(bgr[1]), int(bgr[2]))
+
+
 def make_palette(n: int) -> list[tuple[int, int, int]]:
-    """Return n visually distinct BGR colours spread evenly around the HSV wheel."""
+    """Return n visually distinct BGR colours spread evenly around the HSV wheel.
+    Used by the train-split renderer where IDs are pre-sorted; for test split we use
+    make_color(track_id) directly to match the YOLO output format."""
     palette = []
     for i in range(n):
         hue = int(180 * i / max(n, 1))
@@ -190,20 +202,19 @@ def render_frame_test(img: np.ndarray, frame_idx: int, tracks: dict,
                       tid_to_color: dict, seq_id: str) -> np.ndarray:
     """
     Overlay bounding boxes, trails, and ID labels onto a test-split frame.
-    Occluded boxes are drawn with a thinner stroke (1px vs 2px).
+    Format matches yolo_tracker.py output for direct side-by-side comparison.
+    Occluded boxes still drawn thinner (1px vs 2px) since that's GT-only metadata.
     """
     canvas = img.copy()
-    h, w   = canvas.shape[:2]
 
     for tid, boxes in tracks.items():
         if frame_idx not in boxes:
             continue
         xtl, ytl, xbr, ybr, occ = boxes[frame_idx]
         xtl, ytl, xbr, ybr      = int(xtl), int(ytl), int(xbr), int(ybr)
-        cx, cy                   = (xtl + xbr) // 2, (ytl + ybr) // 2
-        color                    = tid_to_color[tid]
+        cx                       = (xtl + xbr) // 2
+        color                    = make_color(tid)
 
-        # Centre history for trail (derived from box midpoints)
         centre_hist = {
             f: (int((b[0] + b[2]) // 2), int((b[1] + b[3]) // 2))
             for f, b in boxes.items()
@@ -215,8 +226,8 @@ def render_frame_test(img: np.ndarray, frame_idx: int, tracks: dict,
 
     n_visible = sum(1 for b in tracks.values() if frame_idx in b)
     cv2.putText(canvas,
-                f"Frame {frame_idx + 1:03d}  |  Seq {seq_id}  |  "
-                f"{n_visible} visible  |  {len(tracks)} total tracks",
+                f"GT  |  Frame {frame_idx + 1:03d}  |  Seq {seq_id}  |  "
+                f"{n_visible} tracked  |  {len(tracks)} total IDs",
                 (10, 24), cv2.FONT_HERSHEY_SIMPLEX, 0.52, (255, 255, 255), 1, cv2.LINE_AA)
     return canvas
 
@@ -250,7 +261,8 @@ def render_frame_train(img: np.ndarray, frame_idx: int, tracks: dict,
 
 # ── Sequence renderer ──────────────────────────────────────────────────────────
 
-def render_sequence(seq_id: str, split: str, out_dir: str, raw: bool = False) -> None:
+def render_sequence(seq_id: str, split: str, out_dir: str,
+                    raw: bool = False, max_frames: int | None = None) -> None:
     seq_num   = int(seq_id)
     img_split = "test_data" if split == "test" else "train_data"
     img_dir   = os.path.join(MOT_ROOT, img_split, "images")
@@ -265,6 +277,9 @@ def render_sequence(seq_id: str, split: str, out_dir: str, raw: bool = False) ->
     if not frames:
         print(f"  [!] No annotated frames found for seq {seq_id} ({split})")
         return
+
+    if max_frames is not None:
+        frames = frames[:max_frames]
 
     tid_list     = sorted(tracks.keys())
     palette      = make_palette(len(tid_list))
@@ -329,6 +344,11 @@ def parse_args():
         help="Export plain source video with no annotations (outputs to videos/source/ by default).",
     )
     parser.add_argument(
+        "--frames", type=int, default=None, metavar="N",
+        help="Limit to first N frames (default: all frames in the sequence). "
+             "Use to render a clip matching a yolo_tracker.py run for direct comparison.",
+    )
+    parser.add_argument(
         "--out", default=None, metavar="DIR",
         help="Output directory. Defaults to videos/source/ with --raw, videos/gt_tracking/ otherwise.",
     )
@@ -340,4 +360,5 @@ if __name__ == "__main__":
     if args.out is None:
         args.out = "videos/source" if args.raw else "videos/gt_tracking"
     for seq_id in args.seq:
-        render_sequence(seq_id.zfill(5), args.split, args.out, raw=args.raw)
+        render_sequence(seq_id.zfill(5), args.split, args.out,
+                        raw=args.raw, max_frames=args.frames)
