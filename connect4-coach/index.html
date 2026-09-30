@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Four in a Row Coach</title>
+<meta name="description" content="Learn competitive four-in-a-row strategy: threats, poisoned squares, odd and even rows, follow-up and zugzwang, with solver-checked puzzles and a coach to play against.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Atkinson+Hyperlegible:wght@400;700&family=DM+Mono:wght@400;500&family=Unbounded:wght@500;600&display=swap">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 40 40" aria-hidden="true">
+        <rect class="m0" x="1" y="1" width="38" height="38" rx="9"></rect>
+        <circle class="m1" cx="13" cy="27" r="7"></circle>
+        <circle class="m2" cx="27" cy="27" r="7"></circle>
+        <circle class="m1" cx="27" cy="13" r="7"></circle>
+      </svg>
+      <div>
+        <h1>Four in a Row Coach</h1>
+        <p>Competitive strategy, from the three checks to zugzwang.</p>
+      </div>
+    </div>
+    <nav class="tabs" aria-label="Sections">
+      <a class="tab" href="#learn" data-view="learn">Lessons</a>
+      <a class="tab" href="#puzzles" data-view="puzzles">Puzzles</a>
+      <a class="tab" href="#play" data-view="play">Play</a>
+      <a class="tab" href="#rules" data-view="rules">Rules</a>
+    </nav>
+  </header>
+  <main id="main"></main>
+</div>
+<script src="engine.js"></script>
+<script src="strategy.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
